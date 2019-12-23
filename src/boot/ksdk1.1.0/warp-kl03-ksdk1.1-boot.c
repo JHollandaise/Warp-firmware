@@ -1,6 +1,6 @@
 /*
 	Authored 2016-2018. Phillip Stanley-Marbell.
-	
+
 	Additional contributions, 2018: Jan Heck, Chatura Samarakoon, Youchao Wang, Sam Willis.
 
 	All rights reserved.
@@ -55,7 +55,7 @@
 #include "SEGGER_RTT.h"
 #include "warp.h"
 
-//#define WARP_FRDMKL03
+#define WARP_FRDMKL03
 
 /*
 *	Comment out the header file to disable devices
@@ -80,6 +80,8 @@
 //#include "devRV8803C7.h"
 #else
 #	include "devMMA8451Q.h"
+#	include "devSSD1331.h"
+#   include "devINA219.h"
 #endif
 
 #define WARP_BUILD_ENABLE_SEGGER_RTT_PRINTF
@@ -109,6 +111,9 @@ volatile WarpI2CDeviceState			deviceBMX055magState;
 
 #ifdef WARP_BUILD_ENABLE_DEVMMA8451Q
 volatile WarpI2CDeviceState			deviceMMA8451QState;
+#endif
+#ifdef WARP_BUILD_ENABLE_DEVINA219
+volatile WarpI2CDeviceState			deviceINA219State;
 #endif
 
 #ifdef WARP_BUILD_ENABLE_DEVLPS25H
@@ -1236,7 +1241,11 @@ main(void)
 
 #ifdef WARP_BUILD_ENABLE_DEVMMA8451Q
 	initMMA8451Q(	0x1C	/* i2cAddress */,	&deviceMMA8451QState	);
-#endif	
+#endif
+
+#ifdef WARP_BUILD_ENABLE_DEVINA219
+	initINA219(	0x40	/* i2cAddress */,	&deviceINA219State	);
+#endif
 
 #ifdef WARP_BUILD_ENABLE_DEVLPS25H
 	initLPS25H(	0x5C	/* i2cAddress */,	&deviceLPS25HState	);
@@ -1339,9 +1348,15 @@ main(void)
 	 */
 #endif
 
+	//OLED initialisation
+	devSSD1331init();
+	// enable I2C pins
+	enableI2Cpins(menuI2cPullupValue);
 
 
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wmissing-noreturn"
 	while (1)
 	{
 		/*
@@ -1444,7 +1459,10 @@ main(void)
 
 		SEGGER_RTT_WriteString(0, "\r- 'z': dump all sensors data.\n");
 		OSA_TimeDelay(gWarpMenuPrintDelayMilliseconds);
-
+#ifdef WARP_BUILD_ENABLE_DEVINA219
+        SEGGER_RTT_WriteString(0, "\r- ',': access INA219 options\n");
+		OSA_TimeDelay(gWarpMenuPrintDelayMilliseconds);
+#endif
 		SEGGER_RTT_WriteString(0, "\rEnter selection> ");
 		OSA_TimeDelay(gWarpMenuPrintDelayMilliseconds);
 		key = SEGGER_RTT_WaitKey();
@@ -1573,6 +1591,12 @@ main(void)
 #endif
 				OSA_TimeDelay(gWarpMenuPrintDelayMilliseconds);
 
+#ifdef WARP_BUILD_ENABLE_DEVINA219
+				SEGGER_RTT_WriteString(0, "\r\t- 'l' INA219			(0x00--0x31): 3.0V -- 5.5V\n");
+#else
+				SEGGER_RTT_WriteString(0, "\r\t- 'l' INA219			(0x00--0x31): 1.95V -- 3.6V (compiled out) \n");
+#endif
+				OSA_TimeDelay(gWarpMenuPrintDelayMilliseconds);
 				SEGGER_RTT_WriteString(0, "\r\tEnter selection> ");
 				OSA_TimeDelay(gWarpMenuPrintDelayMilliseconds);
 
@@ -1721,6 +1745,14 @@ main(void)
 					{
 						menuTargetSensor = kWarpSensorAS7263;
 						menuI2cDevice = &deviceAS7263State;
+						break;
+					}
+#endif
+#ifdef WARP_BUILD_ENABLE_DEVINA219
+					case 'l':
+					{
+						menuTargetSensor = kWarpSensorINA219;
+						menuI2cDevice = &deviceINA219State;
 						break;
 					}
 #endif
@@ -2456,6 +2488,203 @@ main(void)
 
 				break;
 			}
+		    case ',':
+            {
+                SEGGER_RTT_WriteString(0, "\n\r\t ");
+                OSA_TimeDelay(gWarpMenuPrintDelayMilliseconds);
+
+                SEGGER_RTT_WriteString(0, "\r\t - '1': calibration\n ");
+				OSA_TimeDelay(gWarpMenuPrintDelayMilliseconds);
+                SEGGER_RTT_WriteString(0, "\r\t - '2': read raw current/voltage/power\n");
+                OSA_TimeDelay(gWarpMenuPrintDelayMilliseconds);
+                SEGGER_RTT_WriteString(0, "\r\t - '3': read calibrated current/voltage\n");
+                OSA_TimeDelay(gWarpMenuPrintDelayMilliseconds);
+
+                SEGGER_RTT_WriteString(0, "\r\tEnter selection> ");
+                OSA_TimeDelay(gWarpMenuPrintDelayMilliseconds);
+
+                key = SEGGER_RTT_WaitKey();
+                switch(key) {
+                	case '1':
+						SEGGER_RTT_WriteString(0, "\r\n\t - '1': read config/calibration registers\n");
+						OSA_TimeDelay(gWarpMenuPrintDelayMilliseconds);
+						SEGGER_RTT_WriteString(0, "\r\t - '2': 32V 2A\n ");
+						OSA_TimeDelay(gWarpMenuPrintDelayMilliseconds);
+						SEGGER_RTT_WriteString(0, "\r\t - '3': 32V 1A\n ");
+						OSA_TimeDelay(gWarpMenuPrintDelayMilliseconds);
+						SEGGER_RTT_WriteString(0, "\r\t - '4': 16V 400mA\n ");
+						OSA_TimeDelay(gWarpMenuPrintDelayMilliseconds);
+
+						SEGGER_RTT_WriteString(0, "\r\tEnter selection> ");
+						OSA_TimeDelay(gWarpMenuPrintDelayMilliseconds);
+
+						key = SEGGER_RTT_WaitKey();
+
+						switch(key){
+							case '1':
+							{
+                                SEGGER_RTT_printf(0, "\r\tconfig register(0x00) = 0x%04x\n ",
+                                                  (deviceINA219State.i2cBuffer[0]<<8) + deviceINA219State.i2cBuffer[1]);
+                                OSA_TimeDelay(gWarpMenuPrintDelayMilliseconds);
+								readSensorRegisterINA219(0x05,2);
+								SEGGER_RTT_printf(0, "\r\tcalibration register(0x05) = 0x%04x\n ",
+										(deviceINA219State.i2cBuffer[0]<<8) + deviceINA219State.i2cBuffer[1]);
+                                OSA_TimeDelay(gWarpMenuPrintDelayMilliseconds);
+								readSensorRegisterINA219(0x00,2);
+								break;
+							}
+							case '2':
+                            {
+                                setCalibration_32V_2AINA219();
+                                break;
+                            }
+							case '3':
+                            {
+                                setCalibration_32V_1AINA219();
+                                break;
+                            }
+							case '4':
+                            {
+                                setCalibration_16V_400mAINA219();
+                                break;
+                            }
+
+							default:
+							{
+#ifdef WARP_BUILD_ENABLE_SEGGER_RTT_PRINTF
+								SEGGER_RTT_printf(0, "\r\tInvalid selection '%c' !\n", key);
+#endif
+							}
+						}
+                        break;
+
+                    case '2': {
+
+                        uint16_t (*ValueReadFunction)();
+
+                        SEGGER_RTT_WriteString(0, "\n\r\t - '1': read bus voltage\n");
+                        OSA_TimeDelay(gWarpMenuPrintDelayMilliseconds);
+                        SEGGER_RTT_WriteString(0, "\r\t - '2': read shunt voltage\n");
+                        OSA_TimeDelay(gWarpMenuPrintDelayMilliseconds);
+                        SEGGER_RTT_WriteString(0, "\r\t - '3': read current\n");
+                        OSA_TimeDelay(gWarpMenuPrintDelayMilliseconds);
+                        SEGGER_RTT_WriteString(0, "\r\t - '4': read power\n");
+                        OSA_TimeDelay(gWarpMenuPrintDelayMilliseconds);
+
+                        SEGGER_RTT_WriteString(0, "\r\tEnter selection> ");
+                        OSA_TimeDelay(gWarpMenuPrintDelayMilliseconds);
+
+                        key = SEGGER_RTT_WaitKey();
+
+                        switch(key){
+                            case '1':
+                            {
+                                ValueReadFunction = &getBusVoltage_rawINA219;
+                                break;
+                            }
+                            case '2':
+                            {
+                                ValueReadFunction = &getShuntVoltage_rawINA219;
+                                break;
+                            }
+                            case '3':
+                            {
+                                ValueReadFunction = &getCurrent_rawINA219;
+                                break;
+                            }
+                            case '4':
+                            {
+                                ValueReadFunction = &getPower_rawINA219;
+                                break;
+                            }
+							default: {
+								ValueReadFunction = &getBusVoltage_rawINA219;
+								break;
+							}
+
+                        }
+						SEGGER_RTT_WriteString(0, "\r\n\tHow many reads? ");
+						uint16_t	nSensorReads = read4digits();
+						SEGGER_RTT_WriteString(0, "\r\n\tDelay (ms)? ");
+						uint16_t	delay = read4digits();
+						uint16_t value;
+
+						for (int i=0;i<nSensorReads;i++){
+                            OSA_TimeDelay(delay);
+							value = ValueReadFunction();
+							SEGGER_RTT_printf(0,"\r\n\t%d",value);
+						}
+
+                    }
+                    break;
+                    case '3': {
+
+                        uint32_t (*ValueReadFunction)();
+
+                        SEGGER_RTT_WriteString(0, "\n\r\t - '1': read bus voltage [mV]\n");
+                        OSA_TimeDelay(gWarpMenuPrintDelayMilliseconds);
+                        SEGGER_RTT_WriteString(0, "\r\t - '2': read shunt voltage[muV]\n");
+                        OSA_TimeDelay(gWarpMenuPrintDelayMilliseconds);
+                        SEGGER_RTT_WriteString(0, "\r\t - '3': read current[muA]\n");
+                        OSA_TimeDelay(gWarpMenuPrintDelayMilliseconds);
+
+                        SEGGER_RTT_WriteString(0, "\r\tEnter selection> ");
+                        OSA_TimeDelay(gWarpMenuPrintDelayMilliseconds);
+
+                        key = SEGGER_RTT_WaitKey();
+
+                        switch(key){
+                            case '1':
+                            {
+                                ValueReadFunction = &getBusVoltage_mVINA219;
+                                break;
+                            }
+                            case '2':
+                            {
+                                ValueReadFunction = &getShuntVoltage_muVINA219;
+                                break;
+                            }
+                            case '3':
+                            {
+                                ValueReadFunction = &getCurrent_muAINA219;
+                                break;
+                            }
+                            default: {
+                                ValueReadFunction = &getBusVoltage_mVINA219;
+                                break;
+                            }
+
+                        }
+                        SEGGER_RTT_WriteString(0, "\r\n\tHow many reads? ");
+                        uint16_t	nSensorReads = read4digits();
+                        SEGGER_RTT_WriteString(0, "\r\n\tDelay (ms)? ");
+                        uint16_t	delay = read4digits();
+                        uint32_t value;
+
+                        for (int i=0;i<nSensorReads;i++){
+                            OSA_TimeDelay(delay);
+                            value = ValueReadFunction();
+                            SEGGER_RTT_printf(0,"\r\n\t%d",value);
+                        }
+
+                    }
+                        break;
+
+
+					default:
+					{
+#ifdef WARP_BUILD_ENABLE_SEGGER_RTT_PRINTF
+						SEGGER_RTT_printf(0, "\r\tInvalid selection '%c' !\n", key);
+#endif
+					}
+					break;
+                }
+                break;
+            }
+            case '.':
+            {
+
+            }
 
 
 			/*
@@ -2475,6 +2704,7 @@ main(void)
 			}
 		}
 	}
+#pragma clang diagnostic pop
 
 	return 0;
 }

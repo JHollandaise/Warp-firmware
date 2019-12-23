@@ -43,3 +43,4 @@ typedef enum
 } SSD1331Commands;
 
 int	devSSD1331init(void);
+void fillScreen(char rVal, char gVal, char bVal);

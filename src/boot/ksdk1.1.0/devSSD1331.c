@@ -8,8 +8,8 @@
 #include "warp.h"
 #include "devSSD1331.h"
 
-volatile uint8_t	inBuffer[1];
-volatile uint8_t	payloadBytes[1];
+volatile uint8_t	inBuffer[32];
+volatile uint8_t	payloadBytes[32];
 
 
 /*
@@ -79,8 +79,11 @@ devSSD1331init(void)
 	 *
 	 *	Reconfigure to use as GPIO.
 	 */
+	// OLED CS
 	PORT_HAL_SetMuxMode(PORTB_BASE, 13u, kPortMuxAsGpio);
+	// OLED DC signal
 	PORT_HAL_SetMuxMode(PORTA_BASE, 12u, kPortMuxAsGpio);
+	// OLED RST signal
 	PORT_HAL_SetMuxMode(PORTB_BASE, 0u, kPortMuxAsGpio);
 
 
@@ -126,20 +129,22 @@ devSSD1331init(void)
 	writeCommand(kSSD1331CommandVCOMH);		// 0xBE
 	writeCommand(0x3E);
 	writeCommand(kSSD1331CommandMASTERCURRENT);	// 0x87
-	writeCommand(0x06);
+	writeCommand(15);
 	writeCommand(kSSD1331CommandCONTRASTA);		// 0x81
-	writeCommand(0x91);
+	writeCommand(0xFF);
 	writeCommand(kSSD1331CommandCONTRASTB);		// 0x82
-	writeCommand(0x50);
+	writeCommand(0xFF);
 	writeCommand(kSSD1331CommandCONTRASTC);		// 0x83
-	writeCommand(0x7D);
+	writeCommand(0xFF);
 	writeCommand(kSSD1331CommandDISPLAYON);		// Turn on oled panel
+//	SEGGER_RTT_WriteString(0, "\r\n\tDone with initialization sequence...\n");
 
 	/*
 	 *	To use fill commands, you will have to issue a command to the display to enable them. See the manual.
 	 */
 	writeCommand(kSSD1331CommandFILL);
 	writeCommand(0x01);
+//	SEGGER_RTT_WriteString(0, "\r\n\tDone with enabling fill...\n");
 
 	/*
 	 *	Clear Screen
@@ -149,15 +154,67 @@ devSSD1331init(void)
 	writeCommand(0x00);
 	writeCommand(0x5F);
 	writeCommand(0x3F);
+//	SEGGER_RTT_WriteString(0, "\r\n\tDone with screen clear...\n");
 
 
 
 	/*
-	 *	Any post-initialization drawing commands go here.
+	 *	Read the manual for the SSD1331 (SSD1331_1.2.pdf) to figure
+	 *	out how to fill the entire screen with the brightest shade
+	 *	of green.
 	 */
-	//...
+	 // enter "draw rectangle mode"
+	 writeCommand(0x22);
+	 // set starting column coords
+	 writeCommand(0);
+	 // set starting row coords
+	 writeCommand(0);
+	 // set end column coords;
+	 writeCommand(95);
+	 // set end row coords
+	 writeCommand(63);
+
+	 // set outline colour
+	 // no colour C (blue)
+	 writeCommand(00);
+	 // 255 (full value) colour for B (green)
+	 writeCommand(0xFF);
+	 // no colour A (red)
+	 writeCommand(00);
+
+	 // set fill colour
+	 // no colour C (blue)
+	 writeCommand(00);
+	 // 255 (full value) colour for B (green)
+	 writeCommand(0xFF);
+	 // no colour A (red)
+	 writeCommand(00);
+
+
+
+//	SEGGER_RTT_WriteString(0, "\r\n\tDone with draw rectangle...\n");
 
 
 
 	return 0;
 }
+
+// void fillScreen(char rVal, char gVal, char bVal){
+// 	writeCommand(0x22);
+// 	// set starting column coords
+// 	writeCommand(0);
+// 	// set starting row coords
+// 	writeCommand(0);
+// 	// set end column coords;
+// 	writeCommand(95);
+// 	// set end row coords
+// 	writeCommand(63);
+// 	// set outline colour
+// 	writeCommand(rVal);
+// 	writeCommand(gVal);
+// 	writeCommand(bVal);
+// 	// set fill colour
+// 	writeCommand(rVal);
+// 	writeCommand(gVal);
+// 	writeCommand(bVal);
+// }
