@@ -47,13 +47,7 @@ gpio_output_pin_user_config_t	outputPins[] = {
 		.config.driveStrength = kPortLowDriveStrength,
 	},
 	{
-		.pinName = kWarpPinTPS82740_VSEL1,
-		.config.outputLogic = 1,
-		.config.slewRate = kPortSlowSlewRate,
-		.config.driveStrength = kPortLowDriveStrength,
-	},
-	{
-		.pinName = kWarpPinTPS82740_VSEL2,
+		.pinName = kWarpPinHX711_SCK,
 		.config.outputLogic = 1,
 		.config.slewRate = kPortSlowSlewRate,
 		.config.driveStrength = kPortLowDriveStrength,
@@ -226,6 +220,13 @@ gpio_output_pin_user_config_t	outputPins[] = {
 gpio_input_pin_user_config_t	inputPins[] = {
 	{
 		.pinName = kWarpPinKL03_VDD_ADC,
+		.config.isPullEnable = true,
+		.config.pullSelect = kPortPullUp,
+		.config.isPassiveFilterEnabled = false,
+		.config.interrupt = kPortIntDisabled,
+	},
+	{
+		.pinName = kWarpPinHX711_DOUT,
 		.config.isPullEnable = true,
 		.config.pullSelect = kPortPullUp,
 		.config.isPassiveFilterEnabled = false,
