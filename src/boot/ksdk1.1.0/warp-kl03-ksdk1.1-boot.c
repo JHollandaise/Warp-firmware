@@ -57,7 +57,9 @@
 
 #define WARP_FRDMKL03
 
-#	include "devSSD1331.h"
+#include "devSSD1331.h"
+#include "devHX711.h"
+#include "devMMA8451Q.h"
 
 #define WARP_BUILD_ENABLE_SEGGER_RTT_PRINTF
 //#define WARP_BUILD_BOOT_TO_CSVSTREAM
@@ -107,7 +109,7 @@ void					sleepUntilReset(void);
 void					lowPowerPinStates(void);
 int					char2int(int character);
 uint8_t					readHexByte(void);
-int					read4digits(void);
+uint16_t				read4digits(void);
 
 
 /*
@@ -231,95 +233,22 @@ sleepUntilReset(void)
 	}
 }
 
-
-void
-enableLPUARTpins(void)
-{
-	/*	Enable UART CLOCK */
-	CLOCK_SYS_EnableLpuartClock(0);
-
-	/*
-	*	set UART pin association
-	*	see page 99 in https://www.nxp.com/docs/en/reference-manual/KL03P24M48SF0RM.pdf
-	*/
-
-#ifdef WARP_BUILD_ENABLE_DEVPAN1326
-	/*	Warp KL03_UART_HCI_TX	--> PTB3 (ALT3)	--> PAN1326 HCI_RX */
-	PORT_HAL_SetMuxMode(PORTB_BASE, 3, kPortMuxAlt3);
-	/*	Warp KL03_UART_HCI_RX	--> PTB4 (ALT3)	--> PAN1326 HCI_RX */
-	PORT_HAL_SetMuxMode(PORTB_BASE, 4, kPortMuxAlt3);
-
-	/* TODO: Partial Implementation */
-	/*	Warp PTA6 --> PAN1326 HCI_RTS */
-	/*	Warp PTA7 --> PAN1326 HCI_CTS */
-#endif
-
-	/*
-	 *	Initialize LPUART0. See KSDK13APIRM.pdf section 40.4.3, page 1353
-	 *
-	 */
-	lpuartUserConfig.baudRate = 115;
-	lpuartUserConfig.parityMode = kLpuartParityDisabled;
-	lpuartUserConfig.stopBitCount = kLpuartOneStopBit;
-	lpuartUserConfig.bitCountPerChar = kLpuart8BitsPerChar;
-
-	LPUART_DRV_Init(0,(lpuart_state_t *)&lpuartState,(lpuart_user_config_t *)&lpuartUserConfig);
-
-}
-
-
-void
-disableLPUARTpins(void)
-{
-	/*
-	 *	LPUART deinit
-	 */
-	LPUART_DRV_Deinit(0);
-
-	/*	Warp KL03_UART_HCI_RX	--> PTB4 (GPIO)	*/
-	PORT_HAL_SetMuxMode(PORTB_BASE, 4, kPortMuxAsGpio);
-	/*	Warp KL03_UART_HCI_TX	--> PTB3 (GPIO) */
-	PORT_HAL_SetMuxMode(PORTB_BASE, 3, kPortMuxAsGpio);
-
-#ifdef WARP_BUILD_ENABLE_DEVPAN1326
-	GPIO_DRV_ClearPinOutput(kWarpPinPAN1326_HCI_CTS);
-	GPIO_DRV_ClearPinOutput(kWarpPinPAN1326_HCI_CTS);
-#endif
-
-	GPIO_DRV_ClearPinOutput(kWarpPinLPUART_HCI_TX);
-	GPIO_DRV_ClearPinOutput(kWarpPinLPUART_HCI_RX);
-
-	/* Disable LPUART CLOCK */
-	CLOCK_SYS_DisableLpuartClock(0);
-
-}
-
 void
 enableSPIpins(void)
 {
-	CLOCK_SYS_EnableSpiClock(0);
+    CLOCK_SYS_EnableSpiClock(0);
 
-	/*	Warp KL03_SPI_MISO	--> PTA6	(ALT3)		*/
-	PORT_HAL_SetMuxMode(PORTA_BASE, 6, kPortMuxAlt3);
-
-	/*	Warp KL03_SPI_MOSI	--> PTA7	(ALT3)		*/
-	PORT_HAL_SetMuxMode(PORTA_BASE, 7, kPortMuxAlt3);
-
-	/*	Warp KL03_SPI_SCK	--> PTB0	(ALT3)		*/
-	PORT_HAL_SetMuxMode(PORTB_BASE, 0, kPortMuxAlt3);
-
-
-	/*
-	 *	Initialize SPI master. See KSDK13APIRM.pdf Section 70.4
-	 *
-	 */
-	uint32_t			calculatedBaudRate;
-	spiUserConfig.polarity		= kSpiClockPolarity_ActiveHigh;
-	spiUserConfig.phase		= kSpiClockPhase_FirstEdge;
-	spiUserConfig.direction		= kSpiMsbFirst;
-	spiUserConfig.bitsPerSec	= gWarpSpiBaudRateKbps * 1000;
-	SPI_DRV_MasterInit(0 /* SPI master instance */, (spi_master_state_t *)&spiMasterState);
-	SPI_DRV_MasterConfigureBus(0 /* SPI master instance */, (spi_master_user_config_t *)&spiUserConfig, &calculatedBaudRate);
+    /*
+     *	Initialize SPI master. See KSDK13APIRM.pdf Section 70.4
+     *
+     */
+    uint32_t			calculatedBaudRate;
+    spiUserConfig.polarity		= kSpiClockPolarity_ActiveHigh;
+    spiUserConfig.phase		= kSpiClockPhase_FirstEdge;
+    spiUserConfig.direction		= kSpiMsbFirst;
+    spiUserConfig.bitsPerSec	= gWarpSpiBaudRateKbps * 1000;
+    SPI_DRV_MasterInit(0 /* SPI master instance */, (spi_master_state_t *)&spiMasterState);
+    SPI_DRV_MasterConfigureBus(0 /* SPI master instance */, (spi_master_user_config_t *)&spiUserConfig, &calculatedBaudRate);
 }
 
 
@@ -327,27 +256,10 @@ enableSPIpins(void)
 void
 disableSPIpins(void)
 {
-	SPI_DRV_MasterDeinit(0);
+    SPI_DRV_MasterDeinit(0);
 
-
-	/*	Warp KL03_SPI_MISO	--> PTA6	(GPI)		*/
-	PORT_HAL_SetMuxMode(PORTA_BASE, 6, kPortMuxAsGpio);
-
-	/*	Warp KL03_SPI_MOSI	--> PTA7	(GPIO)		*/
-	PORT_HAL_SetMuxMode(PORTA_BASE, 7, kPortMuxAsGpio);
-
-	/*	Warp KL03_SPI_SCK	--> PTB0	(GPIO)		*/
-	PORT_HAL_SetMuxMode(PORTB_BASE, 0, kPortMuxAsGpio);
-
-	GPIO_DRV_ClearPinOutput(kWarpPinSPI_MOSI);
-	GPIO_DRV_ClearPinOutput(kWarpPinSPI_MISO);
-	GPIO_DRV_ClearPinOutput(kWarpPinSPI_SCK);
-
-
-	CLOCK_SYS_DisableSpiClock(0);
+    CLOCK_SYS_DisableSpiClock(0);
 }
-
-
 
 void
 enableI2Cpins(uint16_t pullupValue)
@@ -516,7 +428,6 @@ lowPowerPinStates(void)
 	GPIO_DRV_ClearPinOutput(kWarpPinTPS82740A_CTLEN);
 	GPIO_DRV_ClearPinOutput(kWarpPinTPS82740B_CTLEN);
 	GPIO_DRV_ClearPinOutput(kWarpPinHX711_SCK);
-	GPIO_DRV_ClearPinOutput(kWarpPinTPS82740_VSEL3);
 
 #ifndef WARP_BUILD_ENABLE_THERMALCHAMBERANALYSIS
 	GPIO_DRV_ClearPinOutput(kWarpPinCLKOUT32K);
@@ -528,8 +439,11 @@ lowPowerPinStates(void)
 	/*
 	 *	Drive these chip selects high since they are active low:
 	 */
-	#ifndef WARP_BUILD_ENABLE_THERMALCHAMBERANALYSIS
-	GPIO_DRV_SetPinOutput(kWarpPinISL23415_nCS);
+#ifndef WARP_BUILD_ENABLE_THERMALCHAMBERANALYSIS
+    GPIO_DRV_SetPinOutput(kWarpPinISL23415_nCS);
+#endif
+#ifdef WARP_BUILD_ENABLE_DEVPAN1326
+    GPIO_DRV_ClearPinOutput(kWarpPinPAN1326_nSHUTD);
 #endif
 #ifdef WARP_BUILD_ENABLE_DEVADXL362
 	GPIO_DRV_SetPinOutput(kWarpPinADXL362_CS);
@@ -562,9 +476,8 @@ lowPowerPinStates(void)
 
 	GPIO_DRV_ClearPinOutput(kWarpPinI2C0_SDA);
 	GPIO_DRV_ClearPinOutput(kWarpPinI2C0_SCL);
-	GPIO_DRV_ClearPinOutput(kWarpPinSPI_MOSI);
-	GPIO_DRV_ClearPinOutput(kWarpPinSPI_MISO);
-	GPIO_DRV_ClearPinOutput(kWarpPinSPI_SCK);
+	GPIO_DRV_ClearPinOutput(kWarpPinSW2);
+	GPIO_DRV_ClearPinOutput(kWarpPinSW3);
 
 	/*
 	 *	HCI_RX / kWarpPinI2C0_SCL is an input. Set it low.
@@ -619,6 +532,16 @@ main(void)
 	uint8_t					menuRegisterAddress = 0x00;
 	uint16_t				menuSupplyVoltage = 0;
 
+
+	/* HX711 related menu parameters */
+
+	uint16_t                numReadsHX711 = 100;
+	// false is hex; true is decimal
+    bool                    rawOutputTypeHX711 = false;
+    // moving average
+    uint8_t                 averageReadingLength = 1;
+    // stored values for moving average (initialised here to save initialising it multiple times)
+    int32_t                storedReadings[20];
 
 	rtc_datetime_t				warpBootDate;
 
@@ -837,10 +760,10 @@ main(void)
 #endif
 
 	//OLED initialisation
-	devSSD1331init();
-	// enable I2C pins
-	enableI2Cpins(menuI2cPullupValue);
+//	devSSD1331init();
 
+	// load bar driver initialisation (default gain = 128)
+    initHX711(kWarpPinHX711_SCK , kWarpPinHX711_DOUT,128);
 
 
 #pragma clang diagnostic push
@@ -849,7 +772,7 @@ main(void)
 	{
 		/*
 		 *	Do not, e.g., lowPowerPinStates() on each iteration, because we actually
-		 *	want to use menu to progressiveley change the machine state with various
+		 *	want to use menu to progressively change the machine state with various
 		 *	commands.
 		 */
 
@@ -858,21 +781,177 @@ main(void)
 		 *	buffers without overrunning them when at max CPU speed.
 		 */
 		SEGGER_RTT_WriteString(0, "\r\n\n\n\n[ *\t\t\t\tJ\ta\tn\tk\t(rev. 1)\t\t\t* ]\n");
-		OSA_TimeDelay(gWarpMenuPrintDelayMilliseconds);
 		SEGGER_RTT_WriteString(0, "\r[  \t\t\t\t      Cambridge / egdirbmaC   \t\t\t\t  ]\n\n");
-		OSA_TimeDelay(gWarpMenuPrintDelayMilliseconds);
+        SEGGER_RTT_WriteString(0, "\r[  \t\t HX711 Load Cell Testing Platform \t\t  ]\n\n");
 
+        SEGGER_RTT_WriteString(0, "\rSelect:\n");
+        SEGGER_RTT_WriteString(0, "\r- '1': Read Raw data.\n");
+        OSA_TimeDelay(gWarpMenuPrintDelayMilliseconds);
+        SEGGER_RTT_WriteString(0, "\r- '2': Read Calibrated data (mg).\n");
+        OSA_TimeDelay(gWarpMenuPrintDelayMilliseconds);
+        SEGGER_RTT_WriteString(0, "\r- '3': Calibrate Sensor.\n");
+        OSA_TimeDelay(gWarpMenuPrintDelayMilliseconds);
+        SEGGER_RTT_WriteString(0, "\r- '4': Tare Sensor.\n");
+        OSA_TimeDelay(gWarpMenuPrintDelayMilliseconds);
+        SEGGER_RTT_WriteString(0, "\r- '5': Set Gain.\n");
+        OSA_TimeDelay(gWarpMenuPrintDelayMilliseconds);
+        SEGGER_RTT_WriteString(0, "\r- '6': Set Number of reads.\n");
+        OSA_TimeDelay(gWarpMenuPrintDelayMilliseconds);
+        SEGGER_RTT_WriteString(0, "\r- '7': Set raw output type.\n");
+        OSA_TimeDelay(gWarpMenuPrintDelayMilliseconds);
+        SEGGER_RTT_WriteString(0, "\r- '8': Set moving average length.\n");
+        OSA_TimeDelay(gWarpMenuPrintDelayMilliseconds);
 
 		SEGGER_RTT_WriteString(0, "\rEnter selection> ");
-		OSA_TimeDelay(gWarpMenuPrintDelayMilliseconds);
 		key = SEGGER_RTT_WaitKey();
-
 		switch (key)
 		{
-            case '.':
+            case '1':
+            case '2':
+			{
+			    int32_t (*readValueFunction)(void);
+				uint16_t numReads = numReadsHX711;
+
+				// initial previous and current set to beginning of loop
+                uint32_t currTime = OSA_TimeGetMsec();
+				uint32_t prevTime;
+                uint32_t elapsedTime = 0;
+
+				int64_t accumulator = 0;
+
+
+				if (key=='1')   readValueFunction = &readHX711;
+				else            readValueFunction = &readCalibratedHX711;
+
+				// TODO: overflow bug in accumulation (about 8 million reads later...)
+                for(uint32_t i=0; (i<numReads)||(numReads==0); i++)
+                {
+                    // accumulator is at full capacity
+                    if (i >= averageReadingLength)
+                    {
+                        // remove oldest value from accumulator
+                        accumulator -= storedReadings[i%averageReadingLength];
+                    }
+
+                    // read new value into array
+                    storedReadings[i%averageReadingLength] = readValueFunction();
+
+                    // add new value to accumulator
+                    accumulator += storedReadings[i%averageReadingLength];
+
+                    // shift old time over
+                    prevTime = currTime;
+                    // update current time
+                    currTime = OSA_TimeGetMsec();
+                    // timer overflow correction factor
+                    if(currTime < prevTime) elapsedTime += 65535;
+                    elapsedTime += currTime - prevTime;
+
+                    // some accuracy lost here as not working with floating points
+                    if (rawOutputTypeHX711||(key=='2')){
+                        // TODO: weird internal bug seems to require this to be done with two prints.
+                        SEGGER_RTT_printf(0, "\n\r%u",elapsedTime);
+                        SEGGER_RTT_printf(0, ", %d", accumulator/min(averageReadingLength,i+1));
+                    }
+                    else {
+                        SEGGER_RTT_printf(0, "\n\r%u",elapsedTime);
+                        SEGGER_RTT_printf(0, ", %X", accumulator/min(averageReadingLength,i+1));
+                    }
+
+
+                    // quit early if 'q' held
+                    if (SEGGER_RTT_GetKey() == 'q') break;
+
+                }
+                break;
+            }
+		    case '3':
             {
 
+                SEGGER_RTT_WriteString(0, "\r\nEnter chosen calibration mass (grams) and ensure scale is EMPTY (e.g '0500')> ");
+                OSA_TimeDelay(gWarpMenuPrintDelayMilliseconds);
+                uint16_t calibrationMass = read4digits();
+
+                // calibrate over 20 values
+                calibrateHX711(30, 5000,calibrationMass);
+                break;
             }
+		    case '4':
+            {
+                // tare over 20 values
+                tareHX711(30);
+                break;
+            }
+            case '5':
+            {
+                SEGGER_RTT_WriteString(0, "\r\n'1'=32; '2'=64; '3'=128 > ");
+                OSA_TimeDelay(gWarpMenuPrintDelayMilliseconds);
+                key = SEGGER_RTT_WaitKey();
+                uint8_t selectedGain= 0;
+                switch (key)
+                {
+                    // pretty nasty fallthrough to save on lines.
+                    case '3':
+                        // 32+32+64 = 128
+                        selectedGain += 64;
+                    case '2':
+                        // 32+32 = 64
+                        selectedGain += 32;
+                    case '1':
+                        selectedGain += 32;
+
+                    setGainHX711(selectedGain);
+                    SEGGER_RTT_printf(0,"\r\nselected gain = %d\n", selectedGain);
+                        break;
+                    default:
+                        SEGGER_RTT_WriteString(0, "\r\nInvalid entry!\n");
+                }
+
+                break;
+            }
+		    case '6':
+            {
+                OSA_TimeDelay(gWarpMenuPrintDelayMilliseconds);
+                SEGGER_RTT_WriteString(0, "\r\nEnter number of value reads (e.g '1000' ) ('0000' is endless)> ");
+                numReadsHX711 = read4digits();
+                SEGGER_RTT_printf(0,"\r\nnumber of reads = %d\n", numReadsHX711);
+                break;
+            }
+		    case '7':
+            {
+                OSA_TimeDelay(gWarpMenuPrintDelayMilliseconds);
+                SEGGER_RTT_WriteString(0, "\r\n'1'=HEX; '2'=DEC > ");
+                key = SEGGER_RTT_WaitKey();
+
+                rawOutputTypeHX711 = false;
+                switch (key)
+                {
+                    // another nasty fallthrough to save on print statements
+                    case '1':
+                        rawOutputTypeHX711 = !rawOutputTypeHX711;
+                    case '2':
+                        rawOutputTypeHX711 = !rawOutputTypeHX711;
+
+                        SEGGER_RTT_printf(0, "\r\nSelected output: %s\n", rawOutputTypeHX711?"DEC":"HEX");
+                        break;
+                    default:
+                        SEGGER_RTT_WriteString(0, "\r\nInvalid entry!\n");
+                }
+                break;
+            }
+            case '8':
+            {
+                OSA_TimeDelay(gWarpMenuPrintDelayMilliseconds);
+                SEGGER_RTT_WriteString(0, "\r\nEnter number of readings to average (e.g '1000' ) ('0020' is max)> ");
+                uint16_t valueCheck;
+                if((valueCheck = read4digits()) > 20) averageReadingLength = 20;
+                else if(valueCheck==0) averageReadingLength = 1;
+                else averageReadingLength = (uint8_t)valueCheck;
+
+                SEGGER_RTT_printf(0, "\r\nmoving average length: %d\n", averageReadingLength);
+                break;
+            }
+
 
 
 			/*
@@ -935,7 +1014,7 @@ readHexByte(void)
 
 
 
-int
+uint16_t
 read4digits(void)
 {
 	uint8_t		digit1, digit2, digit3, digit4;
@@ -996,5 +1075,3 @@ writeBytesToSpi(uint8_t *  payloadBytes, int payloadLength)
 
 	return (status == kStatus_SPI_Success ? kWarpStatusOK : kWarpStatusCommsError);
 }
-
-
