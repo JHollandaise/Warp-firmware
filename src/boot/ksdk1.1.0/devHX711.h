@@ -66,9 +66,9 @@ void waitForStable(uint16_t delay_ms, uint16_t num, uint32_t tol);
 // set the offsetHX711 value for tare weight; num = how many times to read the tare value
 void tareHX711(uint16_t num);
 
-// set both offset and scale. Requires known calibration weight!
+// set mass calibration scale. Requires known calibration weight!
 // num = how many times to read the tare/offset values
-void calibrateHX711(uint16_t num, int32_t diff, uint16_t cal_mass);
+void calibrateHX711(uint16_t num, uint16_t cal_mass);
 
 // return calibrated value
 int32_t readCalibratedHX711();

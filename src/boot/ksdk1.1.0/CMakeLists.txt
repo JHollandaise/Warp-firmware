@@ -87,7 +87,13 @@ ENDIF()
 ADD_EXECUTABLE(Warp
     "${ProjDirPath}/../../../../platform/utilities/src/fsl_misc_utilities.c"
     "${ProjDirPath}/../../../../platform/startup/MKL03Z4/gcc/startup_MKL03Z4.S"
-    "${ProjDirPath}/../../src/warp-kl03-ksdk1.1-boot.c"
+
+    # uncomment this for terminal testing version
+    #"${ProjDirPath}/../../src/warp-kl03-ksdk1.1-boot-segger-connect.c"
+    # uncomment this for oled version
+    "${ProjDirPath}/../../src/warp-kl03-ksdk1.1-boot-oled-connect.c"
+
+
     "${ProjDirPath}/../../src/warp-kl03-ksdk1.1-powermodes.c"
 #    "${ProjDirPath}/../../src/devBMX055.c"
 #    "${ProjDirPath}/../../src/devADXL362.c"

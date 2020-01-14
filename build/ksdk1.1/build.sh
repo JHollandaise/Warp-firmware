@@ -9,7 +9,13 @@
 
 	cp -r ../../tools/sdk/ksdk1.1.0/*				work
 	cp ../../src/boot/ksdk1.1.0/SEGGER*				work/demos/Warp/src/
-	cp ../../src/boot/ksdk1.1.0/warp-kl03-ksdk1.1-boot.c		work/demos/Warp/src/
+
+	# uncomment this for terminal testing version
+	# cp ../../src/boot/ksdk1.1.0/warp-kl03-ksdk1.1-boot-segger-connect.c		work/demos/Warp/src/
+	# uncomment these two for oled "release" version
+	cp ../../src/boot/ksdk1.1.0/warp-kl03-ksdk1.1-boot-oled-connect.c		work/demos/Warp/src/
+	cp ../../src/boot/ksdk1.1.0/menustates.h			work/demos/Warp/src/
+
 	cp ../../src/boot/ksdk1.1.0/warp-kl03-ksdk1.1-powermodes.c	work/demos/Warp/src/
 	cp ../../src/boot/ksdk1.1.0/warp.h				work/demos/Warp/src/
 #	cp ../../src/boot/ksdk1.1.0/devBMX055.*				work/demos/Warp/src/
@@ -37,6 +43,8 @@
 	cp ../../src/boot/ksdk1.1.0/startup_MKL03Z4.S			work/platform/startup/MKL03Z4/gcc/startup_MKL03Z4.S
 	cp ../../src/boot/ksdk1.1.0/gpio_pins.c				work/boards/Warp
 	cp ../../src/boot/ksdk1.1.0/gpio_pins.h				work/boards/Warp
+	cp ../../src/boot/ksdk1.1.0/glcdfont.h			work/demos/Warp/src/
+
 
 	cd work/lib/ksdk_platform_lib/armgcc/KL03Z4 && ./clean.sh; ./build_release.sh
 	cd ../../../../demos/Warp/armgcc/Warp && ./clean.sh; ./build_release.sh

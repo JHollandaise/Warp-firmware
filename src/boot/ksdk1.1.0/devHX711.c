@@ -208,18 +208,12 @@ void tareHX711(uint16_t num)
     offsetHX711 = accumulator/num;
 }
 
-void calibrateHX711(uint16_t num, int32_t diff, uint16_t calMass)
+void calibrateHX711(uint16_t num, uint16_t calMass)
 {
     double accumulator = 0;
 
-    // first ensure scale is zeroed correctly
-    tareHX711(num);
-
+    // set calibration mass
     calMassHX711 = calMass;
-
-    SEGGER_RTT_printf(0, "\rapply %dg mass", calMass);
-    // wait for appropriate mass to be placed on scale
-    while(diff>abs(readHX711() - (int32_t)offsetHX711)) OSA_TimeDelay(100);
 
     // wait for stability
     waitForStable(100,10,300);

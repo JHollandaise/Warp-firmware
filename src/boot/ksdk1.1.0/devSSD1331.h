@@ -41,6 +41,14 @@ typedef enum
 	kSSD1331CommandPRECHARGELEVEL	= 0xBB,
 	kSSD1331CommandVCOMH		= 0xBE,
 } SSD1331Commands;
-
 int	devSSD1331init(void);
-void fillScreen(char rVal, char gVal, char bVal);
+void drawPixelSSD1331(uint8_t x, uint8_t y, uint16_t colour);
+void drawCharSSD1331(uint8_t x, uint8_t y, const char c, uint16_t color, uint16_t bg);
+void writeStringSSD1331(uint8_t x, uint8_t y, const char* charString, uint16_t color, uint16_t bg);
+void updateStringSSD1331(uint8_t x, uint8_t y, const char* oldCharArray, const char* newCharArray,
+        uint16_t color, uint16_t bg);
+void writeNumSSD1331(uint8_t x, uint8_t y, const int32_t number,
+                      uint16_t color, uint16_t bg, const char * format);
+void updateNumSSD1331(uint8_t x, uint8_t y, const int32_t oldNum, const int32_t newNum,
+                          uint16_t color, uint16_t bg, const char * format);
+void filledRectSSD1331(uint8_t x1,uint8_t y1,uint8_t x2,uint8_t y2,uint16_t colorline,uint16_t colorfill);
