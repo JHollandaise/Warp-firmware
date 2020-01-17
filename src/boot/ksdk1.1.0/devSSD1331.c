@@ -5,7 +5,6 @@
 #include "fsl_spi_master_driver.h"
 #include "fsl_port_hal.h"
 
-#include "SEGGER_RTT.h"
 #include "gpio_pins.h"
 #include "warp.h"
 #include "devSSD1331.h"
@@ -93,7 +92,7 @@ writeCommands(uint8_t count)
 }
 
 static int
-writeData(uint8_t dataByte)
+writeData(uint8_t count)
 {
     spi_status_t status;
 
@@ -107,12 +106,11 @@ writeData(uint8_t dataByte)
      */
     GPIO_DRV_SetPinOutput(kSSD1331PinDC);
 
-    payloadBytes[0] = dataByte;
     status = SPI_DRV_MasterTransferBlocking(0	/* master instance */,
                                             NULL		/* spi_master_user_config_t */,
                                             (const uint8_t * restrict)&payloadBytes[0],
                                             (uint8_t * restrict)&inBuffer[0],
-                                            1		/* transfer size */,
+                                            count		/* transfer size */,
                                             1000		/* timeout in microseconds (unlike I2C which is ms) */);
 
     /*
@@ -218,71 +216,37 @@ devSSD1331init(void)
 	writeCommand(0x00);
 	writeCommand(0x5F);
 	writeCommand(0x3F);
-//	SEGGER_RTT_WriteString(0, "\r\n\tDone with screen clear...\n");
-
-
-
-//	/*
-//	 *	Read the manual for the SSD1331 (SSD1331_1.2.pdf) to figure
-//	 *	out how to fill the entire screen with the brightest shade
-//	 *	of green.
-//	 */
-//	 // enter "draw rectangle mode"
-//	 writeCommand(0x22);
-//	 // set starting column coords
-//	 writeCommand(0);
-//	 // set starting row coords
-//	 writeCommand(0);
-//	 // set end column coords;
-//	 writeCommand(95);
-//	 // set end row coords
-//	 writeCommand(63);
-//
-//	 // set outline colour
-//	 // no colour C (blue)
-//	 writeCommand(00);
-//	 // 255 (full value) colour for B (green)
-//	 writeCommand(0xFF);
-//	 // no colour A (red)
-//	 writeCommand(00);
-//
-//	 // set fill colour
-//	 // no colour C (blue)
-//	 writeCommand(00);
-//	 // 255 (full value) colour for B (green)
-//	 writeCommand(0xFF);
-//	 // no colour A (red)
-//	 writeCommand(00);
 
 	return 0;
 }
 
 void drawPixelSSD1331(uint8_t x, uint8_t y, uint16_t colour)
 {
+    // select column address
     payloadBytes[0] = kSSD1331CommandSETCOLUMN;
     payloadBytes[1] = x;
     payloadBytes[2] = x;
 
+    // select row address
     payloadBytes[3] = kSSD1331CommandSETROW;
     payloadBytes[4] = y;
     payloadBytes[5] = y;
 
     writeCommands(6);
-    // colour
-    writeData((unsigned char) colour >> 8);
-    writeData((unsigned char) colour);
+
+    // set colour
+    payloadBytes[0] = (unsigned char) (colour >> 8);
+    payloadBytes[1] = (unsigned char) colour;
+
+    writeData(2);
 }
+
 
 
 void filledRectSSD1331(uint8_t x1,uint8_t y1,uint8_t x2,uint8_t y2,uint16_t colorline,uint16_t colorfill)
 {
 
-    // ensure fill is enabled (currently not needed as fill is never disabled after init)
-//    payloadBytes[0] = kSSD1331CommandFILL;
-//    payloadBytes[1] = 1;
-//    writeCommands(2);
-
-
+    // rectangle drawing mode with outline and fill the same colour
     payloadBytes[0] = kSSD1331CommandDRAWRECT;
     payloadBytes[1] = x1;
     payloadBytes[2] = y1;
@@ -310,6 +274,7 @@ void filledRectSSD1331(uint8_t x1,uint8_t y1,uint8_t x2,uint8_t y2,uint16_t colo
    no background)
 */
 /**************************************************************************/
+// note, code found from adafruit library
 void drawCharSSD1331(uint8_t x, uint8_t y, const char c,
 							uint16_t color, uint16_t bg)
 {
@@ -334,6 +299,7 @@ void drawCharSSD1331(uint8_t x, uint8_t y, const char c,
 
 }
 
+// write a string to screen
 void writeStringSSD1331(uint8_t x, uint8_t y, const char* charArray, uint16_t color, uint16_t bg)
 {
     for(const char* c = charArray; *c != '\0'; c++){
@@ -342,6 +308,7 @@ void writeStringSSD1331(uint8_t x, uint8_t y, const char* charArray, uint16_t co
     }
 }
 
+// compare changed characters and redraw new ones
 void updateStringSSD1331(uint8_t x, uint8_t y, const char* oldCharArray, const char* newCharArray,
         uint16_t color, uint16_t bg)
 {
@@ -373,6 +340,7 @@ void updateStringSSD1331(uint8_t x, uint8_t y, const char* oldCharArray, const c
 
 }
 
+// write an integer to screen
 void writeNumSSD1331(uint8_t x, uint8_t y, const int32_t number,
                       uint16_t color, uint16_t bg, const char * format)
 {
@@ -382,6 +350,7 @@ void writeNumSSD1331(uint8_t x, uint8_t y, const int32_t number,
     writeStringSSD1331(x,y, numberArray, color, bg);
 }
 
+// compare changed numbers and redraw new ones
 void updateNumSSD1331(uint8_t x, uint8_t y, const int32_t oldNum, const int32_t newNum,
         uint16_t color, uint16_t bg, const char * format)
 {

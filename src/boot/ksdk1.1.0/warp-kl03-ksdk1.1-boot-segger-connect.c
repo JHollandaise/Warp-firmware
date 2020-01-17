@@ -40,279 +40,23 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "fsl_misc_utilities.h"
-#include "fsl_device_registers.h"
-#include "fsl_i2c_master_driver.h"
-#include "fsl_spi_master_driver.h"
-#include "fsl_rtc_driver.h"
-#include "fsl_clock_manager.h"
-#include "fsl_power_manager.h"
-#include "fsl_mcglite_hal.h"
-#include "fsl_port_hal.h"
-#include "fsl_lpuart_driver.h"
-
 #include "gpio_pins.h"
 #include "SEGGER_RTT.h"
 #include "warp.h"
 
-#define WARP_FRDMKL03
-
 #include "devHX711.h"
 
-
-#define WARP_BUILD_ENABLE_SEGGER_RTT_PRINTF
-//#define WARP_BUILD_BOOT_TO_CSVSTREAM
-
-
-/*
-*	BTstack includes WIP
-*/
-// #include "btstack_main.h"
-
-
-#define						kWarpConstantStringI2cFailure		"\rI2C failed, reg 0x%02x, code %d\n"
-#define						kWarpConstantStringErrorInvalidVoltage	"\rInvalid supply voltage [%d] mV!"
-#define						kWarpConstantStringErrorSanity		"\rSanity check failed!"
-
-#ifdef WARP_BUILD_ENABLE_DEVMMA8451Q
-volatile WarpI2CDeviceState			deviceMMA8451QState;
-#endif
-#ifdef WARP_BUILD_ENABLE_DEVINA219
-volatile WarpI2CDeviceState			deviceINA219State;
-#endif
-
-
-/*
- *	TODO: move this and possibly others into a global structure
- */
-volatile i2c_master_state_t			i2cMasterState;
-volatile spi_master_state_t			spiMasterState;
-volatile spi_master_user_config_t		spiUserConfig;
-volatile lpuart_user_config_t 			lpuartUserConfig;
-volatile lpuart_state_t 			lpuartState;
 
 /*
  *	TODO: move magic default numbers into constant definitions.
  */
-volatile uint32_t			gWarpI2cBaudRateKbps		= 200;
-volatile uint32_t			gWarpUartBaudRateKbps		= 1;
-volatile uint32_t			gWarpSpiBaudRateKbps		= 200;
-volatile uint32_t			gWarpSleeptimeSeconds		= 0;
 volatile WarpModeMask			gWarpMode			= kWarpModeDisableAdcOnSleep;
-volatile uint32_t			gWarpI2cTimeoutMilliseconds	= 5;
-volatile uint32_t			gWarpSpiTimeoutMicroseconds	= 5;
 volatile uint32_t			gWarpMenuPrintDelayMilliseconds	= 10;
-volatile uint32_t			gWarpSupplySettlingDelayMilliseconds = 1;
 
-void					sleepUntilReset(void);
 void					lowPowerPinStates(void);
-int					char2int(int character);
-uint8_t					readHexByte(void);
 uint16_t				read4digits(void);
 
 
-/*
- *	TODO: change the following to take byte arrays
- */
-WarpStatus				writeByteToI2cDeviceRegister(uint8_t i2cAddress, bool sendCommandByte, uint8_t commandByte, bool sendPayloadByte, uint8_t payloadByte);
-WarpStatus				writeBytesToSpi(uint8_t *  payloadBytes, int payloadLength);
-
-
-void					warpLowPowerSecondsSleep(uint32_t sleepSeconds, bool forceAllPinsIntoLowPowerState);
-
-
-
-/*
- *	From KSDK power_manager_demo.c <<BEGIN>>>
- */
-
-clock_manager_error_code_t clockManagerCallbackRoutine(clock_notify_struct_t *  notify, void *  callbackData);
-
-/*
- *	static clock callback table.
- */
-clock_manager_callback_user_config_t		clockManagerCallbackUserlevelStructure =
-									{
-										.callback	= clockManagerCallbackRoutine,
-										.callbackType	= kClockManagerCallbackBeforeAfter,
-										.callbackData	= NULL
-									};
-
-static clock_manager_callback_user_config_t *	clockCallbackTable[] =
-									{
-										&clockManagerCallbackUserlevelStructure
-									};
-
-clock_manager_error_code_t
-clockManagerCallbackRoutine(clock_notify_struct_t *  notify, void *  callbackData)
-{
-	clock_manager_error_code_t result = kClockManagerSuccess;
-
-	switch (notify->notifyType)
-	{
-		case kClockManagerNotifyBefore:
-			break;
-		case kClockManagerNotifyRecover:
-		case kClockManagerNotifyAfter:
-			break;
-		default:
-			result = kClockManagerError;
-		break;
-	}
-
-	return result;
-}
-
-
-/*
- *	Override the RTC IRQ handler
- */
-void
-RTC_IRQHandler(void)
-{
-	if (RTC_DRV_IsAlarmPending(0))
-	{
-		RTC_DRV_SetAlarmIntCmd(0, false);
-	}
-}
-
-/*
- *	Override the RTC Second IRQ handler
- */
-void
-RTC_Seconds_IRQHandler(void)
-{
-	gWarpSleeptimeSeconds++;
-}
-
-/*
- *	Power manager user callback
- */
-power_manager_error_code_t callback0(power_manager_notify_struct_t *  notify,
-					power_manager_callback_data_t *  dataPtr)
-{
-	WarpPowerManagerCallbackStructure *		callbackUserData = (WarpPowerManagerCallbackStructure *) dataPtr;
-	power_manager_error_code_t			status = kPowerManagerError;
-
-	switch (notify->notifyType)
-	{
-		case kPowerManagerNotifyBefore:
-			status = kPowerManagerSuccess;
-			break;
-		case kPowerManagerNotifyAfter:
-			status = kPowerManagerSuccess;
-			break;
-		default:
-			callbackUserData->errorCount++;
-			break;
-	}
-
-	return status;
-}
-
-/*
- *	From KSDK power_manager_demo.c <<END>>>
- */
-
-
-
-void
-sleepUntilReset(void)
-{
-	while (1)
-	{
-#ifdef WARP_BUILD_ENABLE_DEVSI4705
-		GPIO_DRV_SetPinOutput(kWarpPinSI4705_nRST);
-#endif
-		warpLowPowerSecondsSleep(1, false /* forceAllPinsIntoLowPowerState */);
-#ifdef WARP_BUILD_ENABLE_DEVSI4705
-		GPIO_DRV_ClearPinOutput(kWarpPinSI4705_nRST);
-#endif
-		warpLowPowerSecondsSleep(60, true /* forceAllPinsIntoLowPowerState */);
-	}
-}
-
-void
-enableSPIpins(void)
-{
-    CLOCK_SYS_EnableSpiClock(0);
-
-    /*
-     *	Initialize SPI master. See KSDK13APIRM.pdf Section 70.4
-     *
-     */
-    uint32_t			calculatedBaudRate;
-    spiUserConfig.polarity		= kSpiClockPolarity_ActiveHigh;
-    spiUserConfig.phase		= kSpiClockPhase_FirstEdge;
-    spiUserConfig.direction		= kSpiMsbFirst;
-    spiUserConfig.bitsPerSec	= gWarpSpiBaudRateKbps * 1000;
-    SPI_DRV_MasterInit(0 /* SPI master instance */, (spi_master_state_t *)&spiMasterState);
-    SPI_DRV_MasterConfigureBus(0 /* SPI master instance */, (spi_master_user_config_t *)&spiUserConfig, &calculatedBaudRate);
-}
-
-
-
-void
-disableSPIpins(void)
-{
-    SPI_DRV_MasterDeinit(0);
-
-    CLOCK_SYS_DisableSpiClock(0);
-}
-
-void
-enableI2Cpins(uint16_t pullupValue)
-{
-	CLOCK_SYS_EnableI2cClock(0);
-
-	/*	Warp KL03_I2C0_SCL	--> PTB3	(ALT2 == I2C)		*/
-	PORT_HAL_SetMuxMode(PORTB_BASE, 3, kPortMuxAlt2);
-
-	/*	Warp KL03_I2C0_SDA	--> PTB4	(ALT2 == I2C)		*/
-	PORT_HAL_SetMuxMode(PORTB_BASE, 4, kPortMuxAlt2);
-
-
-	I2C_DRV_MasterInit(0 /* I2C instance */, (i2c_master_state_t *)&i2cMasterState);
-
-
-	/*
-	 *	TODO: need to implement config of the DCP
-	 */
-	//...
-}
-
-
-
-void
-disableI2Cpins(void)
-{
-	I2C_DRV_MasterDeinit(0 /* I2C instance */);	
-
-
-	/*	Warp KL03_I2C0_SCL	--> PTB3	(GPIO)			*/
-	PORT_HAL_SetMuxMode(PORTB_BASE, 3, kPortMuxAsGpio);
-
-	/*	Warp KL03_I2C0_SDA	--> PTB4	(GPIO)			*/
-	PORT_HAL_SetMuxMode(PORTB_BASE, 4, kPortMuxAsGpio);
-
-
-	/*
-	 *	TODO: need to implement clearing of the DCP
-	 */
-	//...
-
-	/*
-	 *	Drive the I2C pins low
-	 */
-	GPIO_DRV_ClearPinOutput(kWarpPinI2C0_SDA);
-	GPIO_DRV_ClearPinOutput(kWarpPinI2C0_SCL);
-
-
-	CLOCK_SYS_DisableI2cClock(0);
-}
-
-
-// TODO: add pin states for pan1326 lp states
 void
 lowPowerPinStates(void)
 {
@@ -352,7 +96,6 @@ lowPowerPinStates(void)
 	 */
 
 	PORT_HAL_SetMuxMode(PORTA_BASE, 12, kPortMuxAsGpio);
-
 
 
 	/*
@@ -418,35 +161,17 @@ lowPowerPinStates(void)
 	{
 		GPIO_DRV_SetPinOutput(kWarpPinKL03_VDD_ADC);
 	}
-#ifndef WARP_BUILD_ENABLE_THERMALCHAMBERANALYSIS
-#ifdef WARP_BUILD_ENABLE_DEVPAN1326
-	GPIO_DRV_ClearPinOutput(kWarpPinPAN1326_nSHUTD);
-#endif
-#endif
-
 	GPIO_DRV_ClearPinOutput(kWarpPinTPS82740A_CTLEN);
 	GPIO_DRV_ClearPinOutput(kWarpPinTPS82740B_CTLEN);
 	GPIO_DRV_ClearPinOutput(kWarpPinHX711_SCK);
-
-#ifndef WARP_BUILD_ENABLE_THERMALCHAMBERANALYSIS
 	GPIO_DRV_ClearPinOutput(kWarpPinCLKOUT32K);
-#endif
-
 	GPIO_DRV_ClearPinOutput(kWarpPinTS5A3154_IN);
 	GPIO_DRV_ClearPinOutput(kWarpPinSI4705_nRST);
 
 	/*
 	 *	Drive these chip selects high since they are active low:
 	 */
-#ifndef WARP_BUILD_ENABLE_THERMALCHAMBERANALYSIS
     GPIO_DRV_SetPinOutput(kWarpPinISL23415_nCS);
-#endif
-#ifdef WARP_BUILD_ENABLE_DEVPAN1326
-    GPIO_DRV_ClearPinOutput(kWarpPinPAN1326_nSHUTD);
-#endif
-#ifdef WARP_BUILD_ENABLE_DEVADXL362
-	GPIO_DRV_SetPinOutput(kWarpPinADXL362_CS);
-#endif
 
 	/*
 	 *	When the PAN1326 is installed, note that it has the
@@ -478,143 +203,31 @@ lowPowerPinStates(void)
 	GPIO_DRV_ClearPinOutput(kWarpPinSW2);
 	GPIO_DRV_ClearPinOutput(kWarpPinSW3);
 
-	/*
-	 *	HCI_RX / kWarpPinI2C0_SCL is an input. Set it low.
-	 */
-	//GPIO_DRV_SetPinOutput(kWarpPinI2C0_SCL);
-
-	/*
-	 *	HCI_TX / kWarpPinI2C0_SDA is an output. Set it high.
-	 */
-	//GPIO_DRV_SetPinOutput(kWarpPinI2C0_SDA);
-
-	/*
-	 *	HCI_RTS / kWarpPinSPI_MISO is an output. Set it high.
-	 */
-	//GPIO_DRV_SetPinOutput(kWarpPinSPI_MISO);
-
-	/*
-	 *	From PAN1326 manual, page 10:
-	 *
-	 *		"When HCI_CTS is high, then CC256X is not allowed to send data to Host device"
-	 */
-	//GPIO_DRV_SetPinOutput(kWarpPinSPI_MOSI);
-}
-
-
-
-void
-warpLowPowerSecondsSleep(uint32_t sleepSeconds, bool forceAllPinsIntoLowPowerState)
-{
-	/*
-	 *	Set all pins into low-power states. We don't just disable all pins,
-	 *	as the various devices hanging off will be left in higher power draw
-	 *	state. And manuals say set pins to output to reduce power.
-	 */
-	if (forceAllPinsIntoLowPowerState)
-	{
-		lowPowerPinStates();
-	}
-
-	warpSetLowPowerMode(kWarpPowerModeVLPR, 0);
-	warpSetLowPowerMode(kWarpPowerModeVLPS, sleepSeconds);
 }
 
 
 int
 main(void)
 {
-	uint8_t					key;
-	WarpSensorDevice			menuTargetSensor = kWarpSensorBMX055accel;
-	volatile WarpI2CDeviceState *		menuI2cDevice = NULL;
-	uint16_t				menuI2cPullupValue = 32768;
-	uint8_t					menuRegisterAddress = 0x00;
-	uint16_t				menuSupplyVoltage = 0;
+	/* menu parameters */
 
-
-	/* HX711 related menu parameters */
-
+    // selected option
+    uint8_t					key;
+    // sensor reads before auto exit to menu
 	uint16_t                numReadsHX711 = 0;
 	// false is hex; true is decimal
     bool                    rawOutputTypeHX711 = false;
-    // moving average
+    // moving average size
     uint8_t                 averageReadingLength = 1;
+
+
     // stored values for moving average (initialised here to save initialising it multiple times)
     int32_t                storedReadings[20];
-
-	rtc_datetime_t				warpBootDate;
-
-	power_manager_user_config_t		warpPowerModeWaitConfig;
-	power_manager_user_config_t		warpPowerModeStopConfig;
-	power_manager_user_config_t		warpPowerModeVlpwConfig;
-	power_manager_user_config_t		warpPowerModeVlpsConfig;
-	power_manager_user_config_t		warpPowerModeVlls0Config;
-	power_manager_user_config_t		warpPowerModeVlls1Config;
-	power_manager_user_config_t		warpPowerModeVlls3Config;
-	power_manager_user_config_t		warpPowerModeRunConfig;
-
-	const power_manager_user_config_t	warpPowerModeVlprConfig = {
-							.mode			= kPowerManagerVlpr,
-							.sleepOnExitValue	= false,
-							.sleepOnExitOption	= false
-						};
-
-	power_manager_user_config_t const *	powerConfigs[] = {
-							/*
-							 *	NOTE: This order is depended on by POWER_SYS_SetMode()
-							 *
-							 *	See KSDK13APIRM.pdf Section 55.5.3
-							 */
-							&warpPowerModeWaitConfig,
-							&warpPowerModeStopConfig,
-							&warpPowerModeVlprConfig,
-							&warpPowerModeVlpwConfig,
-							&warpPowerModeVlpsConfig,
-							&warpPowerModeVlls0Config,
-							&warpPowerModeVlls1Config,
-							&warpPowerModeVlls3Config,
-							&warpPowerModeRunConfig,
-						};
-
-	WarpPowerManagerCallbackStructure			powerManagerCallbackStructure;
-
-	/*
-	 *	Callback configuration structure for power manager
-	 */
-	const power_manager_callback_user_config_t callbackCfg0 = {
-							callback0,
-							kPowerManagerCallbackBeforeAfter,
-							(power_manager_callback_data_t *) &powerManagerCallbackStructure};
-
-	/*
-	 *	Pointers to power manager callbacks.
-	 */
-	power_manager_callback_user_config_t const *	callbacks[] = {
-								&callbackCfg0
-						};
-
-
-
-	/*
-	 *	Enable clock for I/O PORT A and PORT B
-	 */
-	CLOCK_SYS_EnablePortClock(0);
-	CLOCK_SYS_EnablePortClock(1);
-
-
-
-	/*
-	 *	Setup board clock source.
-	 */
-	g_xtal0ClkFreq = 32768U;
-
-
 
 	/*
 	 *	Initialize KSDK Operating System Abstraction layer (OSA) layer.
 	 */
 	OSA_Init();
-
 
 
 	/*
@@ -632,79 +245,6 @@ main(void)
 	OSA_TimeDelay(200);
 	SEGGER_RTT_WriteString(0, "1...\n\r");
 	OSA_TimeDelay(200);
-
-
-
-	/*
-	 *	Configure Clock Manager to default, and set callback for Clock Manager mode transition.
-	 *
-	 *	See "Clocks and Low Power modes with KSDK and Processor Expert" document (Low_Power_KSDK_PEx.pdf)
-	 */
-	CLOCK_SYS_Init(	g_defaultClockConfigurations,
-			CLOCK_CONFIG_NUM,
-			&clockCallbackTable,
-			ARRAY_SIZE(clockCallbackTable)
-			);
-	CLOCK_SYS_UpdateConfiguration(CLOCK_CONFIG_INDEX_FOR_RUN, kClockManagerPolicyForcible);
-
-
-
-	/*
-	 *	Initialize RTC Driver
-	 */
-	RTC_DRV_Init(0);
-
-
-
-	/*
-	 *	Set initial date to 1st January 2016 00:00, and set date via RTC driver
-	 */
-	warpBootDate.year	= 2016U;
-	warpBootDate.month	= 1U;
-	warpBootDate.day	= 1U;
-	warpBootDate.hour	= 0U;
-	warpBootDate.minute	= 0U;
-	warpBootDate.second	= 0U;
-	RTC_DRV_SetDatetime(0, &warpBootDate);
-
-
-
-	/*
-	 *	Setup Power Manager Driver
-	 */
-	memset(&powerManagerCallbackStructure, 0, sizeof(WarpPowerManagerCallbackStructure));
-
-
-	warpPowerModeVlpwConfig = warpPowerModeVlprConfig;
-	warpPowerModeVlpwConfig.mode = kPowerManagerVlpw;
-	
-	warpPowerModeVlpsConfig = warpPowerModeVlprConfig;
-	warpPowerModeVlpsConfig.mode = kPowerManagerVlps;
-	
-	warpPowerModeWaitConfig = warpPowerModeVlprConfig;
-	warpPowerModeWaitConfig.mode = kPowerManagerWait;
-	
-	warpPowerModeStopConfig = warpPowerModeVlprConfig;
-	warpPowerModeStopConfig.mode = kPowerManagerStop;
-
-	warpPowerModeVlls0Config = warpPowerModeVlprConfig;
-	warpPowerModeVlls0Config.mode = kPowerManagerVlls0;
-
-	warpPowerModeVlls1Config = warpPowerModeVlprConfig;
-	warpPowerModeVlls1Config.mode = kPowerManagerVlls1;
-
-	warpPowerModeVlls3Config = warpPowerModeVlprConfig;
-	warpPowerModeVlls3Config.mode = kPowerManagerVlls3;
-
-	warpPowerModeRunConfig.mode = kPowerManagerRun;
-
-	POWER_SYS_Init(	&powerConfigs,
-			sizeof(powerConfigs)/sizeof(power_manager_user_config_t *),
-			&callbacks,
-			sizeof(callbacks)/sizeof(power_manager_callback_user_config_t *)
-			);
-
-
 
 	/*
 	 *	Switch CPU to Very Low Power Run (VLPR) mode
@@ -728,43 +268,11 @@ main(void)
 	lowPowerPinStates();
 
 
-
-	/*
-	 *	Toggle LED3 (kWarpPinSI4705_nRST)
-	 */
-	GPIO_DRV_SetPinOutput(kWarpPinSI4705_nRST);
-	OSA_TimeDelay(200);
-	GPIO_DRV_ClearPinOutput(kWarpPinSI4705_nRST);
-	OSA_TimeDelay(200);
-	GPIO_DRV_SetPinOutput(kWarpPinSI4705_nRST);
-	OSA_TimeDelay(200);
-	GPIO_DRV_ClearPinOutput(kWarpPinSI4705_nRST);
-	OSA_TimeDelay(200);
-	GPIO_DRV_SetPinOutput(kWarpPinSI4705_nRST);
-	OSA_TimeDelay(200);
-	GPIO_DRV_ClearPinOutput(kWarpPinSI4705_nRST);
-
-#ifdef WARP_BUILD_BOOT_TO_CSVSTREAM
-	/*
-	 *	Force to printAllSensors
-	 */
-	gWarpI2cBaudRateKbps = 300;
-	warpSetLowPowerMode(kWarpPowerModeRUN, 0 /* sleep seconds : irrelevant here */);
-	enableSssupply(3000);
-	enableI2Cpins(menuI2cPullupValue);
-	printAllSensors(false /* printHeadersAndCalibration */, false /* hexModeFlag */, 0 /* menuDelayBetweenEachRun */, menuI2cPullupValue);
-	/*
-	 *	Notreached
-	 */
-#endif
-
 	// load bar driver initialisation (default gain = 128)
     initHX711(kWarpPinHX711_SCK , kWarpPinHX711_DOUT,128);
 
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wmissing-noreturn"
-	while (1)
+	while (true)
 	{
 		/*
 		 *	Do not, e.g., lowPowerPinStates() on each iteration, because we actually
@@ -863,23 +371,29 @@ main(void)
 		    case '3':
             {
 
-                SEGGER_RTT_WriteString(0, "\r\nEnter chosen calibration mass (grams) and ensure scale is EMPTY (e.g '0500')> ");
+                SEGGER_RTT_WriteString(0, "\r\nEnter chosen calibration mass (mg) and ensure scale is EMPTY (e.g '00500000')> ");
                 OSA_TimeDelay(gWarpMenuPrintDelayMilliseconds);
-                uint16_t calibrationMass = read4digits();
+                uint32_t calibrationMass = read4digits()*10000;
+                calibrationMass += read4digits();
 
-                // tare over 30 values
-                tareHX711(30);
+                SEGGER_RTT_WriteString(0, "\r\ntaring...");
+                // tare over 100 values
+                tareHX711(100);
 
-                SEGGER_RTT_printf(0, "\rapply %dg mass", calibrationMass);
+                SEGGER_RTT_printf(0, "\r\napply %dmg mass (then press enter)", calibrationMass);
+                // wait for any key
+                SEGGER_RTT_WaitKey();
+                SEGGER_RTT_WriteString(0, "\r\ncalibrating...");
 
-                // calibrate over 30 values
-                calibrateHX711(30, 5000,calibrationMass);
+                // calibrate over 100 value reads
+                calibrateHX711(100,calibrationMass);
                 break;
             }
 		    case '4':
             {
-                // tare over 30 values
-                tareHX711(30);
+                SEGGER_RTT_WriteString(0, "\r\ntaring...");
+                // tare over 150 values
+                tareHX711(100);
                 break;
             }
             case '5':
@@ -948,7 +462,7 @@ main(void)
                 else if(valueCheck==0) averageReadingLength = 1;
                 else averageReadingLength = (uint8_t)valueCheck;
 
-                SEGGER_RTT_printf(0, "\r\nmoving average length: %d\n", averageReadingLength);
+                SEGGER_RTT_printf(0, "\r\nMoving average length: %d\n", averageReadingLength);
                 break;
             }
 
@@ -963,113 +477,22 @@ main(void)
 
 			default:
 			{
-				#ifdef WARP_BUILD_ENABLE_SEGGER_RTT_PRINTF
 				SEGGER_RTT_printf(0, "\r\tInvalid selection '%c' !\n", key);
-				#endif
 			}
 		}
 	}
-#pragma clang diagnostic pop
 
-	return 0;
 }
-
-
-
-int
-char2int(int character)
-{
-	if (character >= '0' && character <= '9')
-	{
-		return character - '0';
-	}
-
-	if (character >= 'a' && character <= 'f')
-	{
-		return character - 'a' + 10;
-	}
-
-	if (character >= 'A' && character <= 'F')
-	{
-		return character - 'A' + 10;
-	}
-
-	return 0;
-}
-
-
-
-uint8_t
-readHexByte(void)
-{
-	uint8_t		topNybble, bottomNybble;
-
-	topNybble = SEGGER_RTT_WaitKey();
-	bottomNybble = SEGGER_RTT_WaitKey();
-
-	return (char2int(topNybble) << 4) + char2int(bottomNybble);
-}
-
-
 
 uint16_t
 read4digits(void)
 {
 	uint8_t		digit1, digit2, digit3, digit4;
-	
+
 	digit1 = SEGGER_RTT_WaitKey();
 	digit2 = SEGGER_RTT_WaitKey();
 	digit3 = SEGGER_RTT_WaitKey();
 	digit4 = SEGGER_RTT_WaitKey();
 
 	return (digit1 - '0')*1000 + (digit2 - '0')*100 + (digit3 - '0')*10 + (digit4 - '0');
-}
-
-
-
-WarpStatus
-writeByteToI2cDeviceRegister(uint8_t i2cAddress, bool sendCommandByte, uint8_t commandByte, bool sendPayloadByte, uint8_t payloadByte)
-{
-	i2c_status_t	status;
-	uint8_t		commandBuffer[1];
-	uint8_t		payloadBuffer[1];
-	i2c_device_t	i2cSlaveConfig =
-			{
-				.address = i2cAddress,
-				.baudRate_kbps = gWarpI2cBaudRateKbps
-			};
-
-	commandBuffer[0] = commandByte;
-	payloadBuffer[0] = payloadByte;
-
-	status = I2C_DRV_MasterSendDataBlocking(
-						0	/* instance */,
-						&i2cSlaveConfig,
-						commandBuffer,
-						(sendCommandByte ? 1 : 0),
-						payloadBuffer,
-						(sendPayloadByte ? 1 : 0),
-						gWarpI2cTimeoutMilliseconds);
-
-	return (status == kStatus_I2C_Success ? kWarpStatusOK : kWarpStatusDeviceCommunicationFailed);
-}
-
-
-
-WarpStatus
-writeBytesToSpi(uint8_t *  payloadBytes, int payloadLength)
-{
-	uint8_t		inBuffer[payloadLength];
-	spi_status_t	status;
-	
-	enableSPIpins();
-	status = SPI_DRV_MasterTransferBlocking(0		/* master instance */,
-						NULL		/* spi_master_user_config_t */,
-						payloadBytes,
-						inBuffer,
-						payloadLength	/* transfer size */,
-						1000		/* timeout in microseconds (unlike I2C which is ms) */);					
-	disableSPIpins();
-
-	return (status == kStatus_SPI_Success ? kWarpStatusOK : kWarpStatusCommsError);
 }

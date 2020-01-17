@@ -134,8 +134,8 @@ int32_t readHX711()
 
 int32_t readCalibratedHX711()
 {
-    // additional 1000 times scaling puts result in mg to maintain precision
-    return (int32_t)round( (readHX711() - offsetHX711) * calMassHX711 * 1000 / scaleHX711 );
+    // result in mg to maintain precision
+    return (int32_t)round( (readHX711() - offsetHX711) * calMassHX711 / scaleHX711 );
 }
 
 void waitReadyHX711(uint16_t delay_ms)
@@ -208,7 +208,7 @@ void tareHX711(uint16_t num)
     offsetHX711 = accumulator/num;
 }
 
-void calibrateHX711(uint16_t num, uint16_t calMass)
+void calibrateHX711(uint16_t num, uint32_t calMass)
 {
     double accumulator = 0;
 
@@ -219,7 +219,7 @@ void calibrateHX711(uint16_t num, uint16_t calMass)
     waitForStable(100,10,300);
 
     // generate summed value
-    for(int i=0;i<num;i++){
+    for(uint16_t i=0;i<num;i++){
         accumulator += (readHX711() - offsetHX711);
     }
 

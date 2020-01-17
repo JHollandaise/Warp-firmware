@@ -68,7 +68,7 @@ void tareHX711(uint16_t num);
 
 // set mass calibration scale. Requires known calibration weight!
 // num = how many times to read the tare/offset values
-void calibrateHX711(uint16_t num, uint16_t cal_mass);
+void calibrateHX711(uint16_t num, uint32_t cal_mass);
 
 // return calibrated value
 int32_t readCalibratedHX711();
