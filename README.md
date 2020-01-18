@@ -142,6 +142,8 @@ NOTE: any value greater than 20 will simply set the buffer size to 20.
 
 A two button interface has been developed to access all the same features as discussed in section 4. If you are using the KL03 (SW2 = button 1; SW3 = button 2) in the default configuration.
 
+### 5.1 Readings Stream
+
 Upon booting, the OLED will display the following
 
 
@@ -154,15 +156,82 @@ Upon booting, the OLED will display the following
 
 This will display a continuous measurement stream, with button 2 cycling the reading type.
 
-Upon pressing button 1, following will be shown
+### 5.2 Settings Menu
+
+Upon pressing button 1 from the readings stream or button 2 from Exit (see below), following will be shown
 
 	+-----------------+
 	|                 | (1)-->: Return to readings stream
 	|    Settings?    |
-	|                 | (2)-->: 
+	|                 | (2)-->: Enter settings menu
 	+-----------------+
 
-## 6.  To update your fork
+Button 1 will return to the previous screen, Button 2 enters the settings menu:
+
+	+-----------------+
+	|                 | (1)-->: Next Menu Item
+	|      Tare?      |
+	|                 | (2)-->: Tare Scale (set current reading to
+	+-----------------+         zero offset)
+
+Button 1 moves to next option, button 2 will tare (zero) the scale to the currently applied mass.
+
+	+-----------------+
+	|                 | (1)-->: Next Menu Item
+	|      Tare?      |
+	|                 | (2)-->: Tare Scale (set current reading to
+	+-----------------+         zero offset)
+
+Button 1 moves to next option, button 2 will initiate the calibration process (see 5.3)
+
+	+-----------------+
+	| Average Length? | (1)-->: Next Menu Item
+	|                 |
+	|      Value      | (2)-->: Cycle Average reading length
+	+-----------------+         From 1->20
+
+Button 1 moves to next option, button 2 will increment the moving average buffer size.
+
+	+-----------------+
+	|      Gain?      | (1)-->: Next Menu Item
+	|                 |
+	|      Value      | (2)-->: Cycle Gain
+	+-----------------+         From 32->64->128->32
+
+Button 1 moves to next option, button 2 will cycle through gain values (see 4.5 for details)
+
+	+-----------------+
+	|                 | (1)-->: Next Menu Item (loop back to Tare)
+	|      Exit?      |
+	|                 | (2)-->: Return to settings menu screen
+	+-----------------+         
+
+Button 1 moves to next option (Tare? screen), button 2 will return to the top level settings screen
+
+### 5.3 Scale calibration
+
+Upon initiating the calibration process (see 5.2), the following will be shown:
+
+	+-----------------+
+	|                 |
+	| Clear Any Mass  | (2)-->: Tare Sensor
+	|                 |
+	+-----------------+
+
+Button two will proceed to zero the sensor so ensure scale is empty BEFORE pressing button 2. Wait for the following screen to appear
+
+	+-----------------+
+	| Calib Mass? (g) | (2)-->: Cycle Calibration Mass
+	|                 |         From 100->200->500->1000
+	|      Value      | (2)-->: Proceed to Calibrate
+	+-----------------+         
+
+Button 1 cycles through available calibration masses, button 2 proceeds with the currently selected mass. Ensure calibration mass is applied BEFORE pressing button 2.
+After this process, the screen will return to the calibrate? screen.
+
+## 6. Wiring configuration
+
+## 7.  To update your fork
 From your local clone:
 
 	git remote add upstream https://github.com/physical-computation/Warp-firmware.git
