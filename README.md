@@ -231,6 +231,29 @@ After this process, the screen will return to the calibrate? screen.
 
 ## 6. Wiring configuration
 
+Below is detailed the default wiring configuration for the KL03:
+
+### 6.1: HX711 connection
+
+KL03 -> HX711
+=============
+PTA7 -> SCK
+PTA6 -> DOUT
+
+Power is 5v or 3.3v
+
+### 6.2: OLED connection
+
+KL03 -> OLED
+============
+PTA8 -> MOSI
+PTA9 -> SCK
+PTB13-> CS
+PTA12-> DC
+PTB1 -> RST
+
+Power is 5v
+
 ## 7.  To update your fork
 From your local clone:
 
