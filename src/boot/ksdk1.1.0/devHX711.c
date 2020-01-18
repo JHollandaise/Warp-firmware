@@ -155,6 +155,7 @@ uint8_t shiftInMsbFirstHX711()
 {
     uint8_t value = 0;
 
+    // read in single byte (see datasheet)
     for (uint8_t i = 0; i < 8; ++i) {
         GPIO_DRV_SetPinOutput(sckPinNameHX711);
         value |= GPIO_DRV_ReadPinInput(doutPinNameHX711) << (7 - i);
@@ -188,7 +189,7 @@ void waitForStable(uint16_t delay_ms, uint16_t num, uint32_t tol)
             }
         }
 
-        // check for success condition
+        // check if reading range falls inside allowed tolerance
         if(tol > abs(maxReading-minReading)) return;
 
     }
@@ -201,6 +202,7 @@ void tareHX711(uint16_t num)
     // ensure no weight change
     waitForStable(100,10,300);
 
+    // count up readings
     for(int i=0;i<num;i++){
         accumulator += readHX711();
     }

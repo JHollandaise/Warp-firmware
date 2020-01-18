@@ -10,9 +10,9 @@
 	cp -r ../../tools/sdk/ksdk1.1.0/*				work
 	cp ../../src/boot/ksdk1.1.0/SEGGER*				work/demos/Warp/src/
 
-	# uncomment this for terminal testing version
+	# uncomment this for terminal version
 	# cp ../../src/boot/ksdk1.1.0/warp-kl03-ksdk1.1-boot-segger-connect.c		work/demos/Warp/src/
-	# uncomment these two for oled "release" version
+	# uncomment these two for oled version
 	cp ../../src/boot/ksdk1.1.0/warp-kl03-ksdk1.1-boot-oled-connect.c		work/demos/Warp/src/
 	cp ../../src/boot/ksdk1.1.0/menustates.h			work/demos/Warp/src/
 
